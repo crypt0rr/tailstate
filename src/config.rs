@@ -221,7 +221,7 @@ impl Config {
             .with_context(|| format!("read configuration {}", path.display()))?;
         let expanded = expand_env(&raw)?;
         let mut config: Config =
-            serde_yaml::from_str(&expanded).context("parse YAML configuration")?;
+            serde_yaml_ng::from_str(&expanded).context("parse YAML configuration")?;
         config.resolve_files()?;
         config.validate()?;
         Ok(config)
