@@ -1,5 +1,6 @@
 services:
   tailstate:
+    container_name: tailstate
     build: .
     image: ${TAILSTATE_IMAGE:-ghcr.io/crypt0rr/tailstate:latest}
     restart: unless-stopped
