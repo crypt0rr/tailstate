@@ -236,6 +236,58 @@ func TestNewIgnoredFieldsSilentlyRenormalizeExistingSnapshots(t *testing.T) {
 	}
 }
 
+func TestStoredInviteURLFingerprintMigratesWithoutChange(t *testing.T) {
+	ctx := context.Background()
+	st := testStore(t)
+	generation, err := st.SaveSettings(ctx, settings())
+	if err != nil {
+		t.Fatal(err)
+	}
+	inviteURL := "https://login.tailscale.com/admin/invite/super-secret"
+	currentData := map[string]any{
+		"deviceInvites": []any{
+			map[string]any{
+				"accepted":  true,
+				"deviceId":  "1",
+				"id":        "invite-1",
+				"inviteUrl": inviteURL,
+			},
+		},
+	}
+	baseline := []model.Collected{{Collector: "device_details", Resources: []model.Resource{{
+		ID: "1", Type: "device_details", Name: "server", Data: currentData,
+	}}}}
+	if _, err := st.ApplyBatch(ctx, generation, baseline, func([]model.Change) string { return "digest" }); err != nil {
+		t.Fatal(err)
+	}
+
+	var storedRaw []byte
+	if err := st.db.QueryRowContext(ctx, "SELECT canonical_json FROM snapshots WHERE generation=? AND collector='device_details' AND resource_id='1'", generation).Scan(&storedRaw); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.ExecContext(ctx, "UPDATE snapshots SET content_hash='legacy-format' WHERE generation=? AND collector='device_details' AND resource_id='1'", generation); err != nil {
+		t.Fatal(err)
+	}
+
+	current := []model.Collected{{Collector: "device_details", Resources: []model.Resource{{
+		ID: "1", Type: "device_details", Name: "server", Data: currentData,
+	}}}}
+	changes, err := st.ApplyBatch(ctx, generation, current, func([]model.Change) string { return "digest" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 0 {
+		t.Fatalf("stored invite URL fingerprint migration emitted changes: %#v", changes)
+	}
+	var migratedRaw []byte
+	if err := st.db.QueryRowContext(ctx, "SELECT canonical_json FROM snapshots WHERE generation=? AND collector='device_details' AND resource_id='1'", generation).Scan(&migratedRaw); err != nil {
+		t.Fatal(err)
+	}
+	if string(storedRaw) != string(migratedRaw) {
+		t.Fatalf("stored invite fingerprint changed during migration:\n%s\n%s", storedRaw, migratedRaw)
+	}
+}
+
 func TestDeviceRuntimeMigrationKeepsClientUpdateAlert(t *testing.T) {
 	ctx := context.Background()
 	st := testStore(t)

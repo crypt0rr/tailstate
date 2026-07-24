@@ -103,6 +103,10 @@ func normalizeFor(collector string, value any, root bool) any {
 				continue
 			}
 			if strings.Contains(compact, "url") || compact == "endpoint" {
+				if fingerprint, ok := redactedFingerprint(child); ok {
+					out[key] = map[string]any{"redacted_sha256": fingerprint}
+					continue
+				}
 				raw, _ := json.Marshal(child)
 				sum := sha256.Sum256(raw)
 				out[key] = map[string]any{"redacted_sha256": hex.EncodeToString(sum[:])}
@@ -125,6 +129,21 @@ func normalizeFor(collector string, value any, root bool) any {
 	default:
 		return value
 	}
+}
+
+func redactedFingerprint(value any) (string, bool) {
+	fingerprint, ok := value.(map[string]any)
+	if !ok || len(fingerprint) != 1 {
+		return "", false
+	}
+	encoded, ok := fingerprint["redacted_sha256"].(string)
+	if !ok || len(encoded) != sha256.Size*2 {
+		return "", false
+	}
+	if _, err := hex.DecodeString(encoded); err != nil {
+		return "", false
+	}
+	return strings.ToLower(encoded), true
 }
 
 func collectorFieldAllowed(collector, field string) bool {
