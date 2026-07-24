@@ -52,6 +52,32 @@ func TestSensitiveURLIsHashed(t *testing.T) {
 	}
 }
 
+func TestCanonicalURLRedactionIsIdempotent(t *testing.T) {
+	value := map[string]any{
+		"deviceInvites": []any{
+			map[string]any{
+				"id":        "invite-1",
+				"inviteUrl": "https://login.tailscale.com/admin/invite/super-secret",
+			},
+		},
+	}
+	firstRaw, firstHash, err := CanonicalFor("device_details", value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored any
+	if err := json.Unmarshal(firstRaw, &stored); err != nil {
+		t.Fatal(err)
+	}
+	secondRaw, secondHash, err := CanonicalFor("device_details", stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstHash != secondHash || string(firstRaw) != string(secondRaw) {
+		t.Fatalf("canonical URL fingerprint changed when normalized again:\n%s\n%s", firstRaw, secondRaw)
+	}
+}
+
 func TestCanonicalIgnoresProfilePictureURL(t *testing.T) {
 	before := map[string]any{
 		"deviceInvites": []any{
